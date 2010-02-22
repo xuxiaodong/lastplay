@@ -1,0 +1,81 @@
+#!/usr/bin/env perl
+#
+# Remember last play position of movie to resume from it later. (Only for
+# MPlayer)
+# Author: Xu Xiaodong <xxdlhy@gmail.com>, 2009
+# License: GPLv3
+#
+
+use strict;
+use warnings;
+
+my $mplayer_output = 'mplayeroutput';
+my $last_play_info = 'lastplayinfo';
+my $movie          = shift;
+
+sub _read_last_play {
+    open LASTPLAYINFO, $last_play_info
+        or die "Can't open $last_play_info: $!\n";
+    chomp( my $time = readline LASTPLAYINFO );
+    close LASTPLAYINFO;
+    return $time;
+}
+
+sub _write_last_play {
+    local $/ = q{[J};
+    my @total_secs;
+    open MPLAYEROUTPUT, $mplayer_output
+        or die "Can't open $mplayer_output:$!\n";
+    while (<MPLAYEROUTPUT>) { push @total_secs, $1 if /A:\s*(\d+)/ }
+    close MPLAYEROUTPUT;
+    unlink $mplayer_output;
+
+    my $total_sec = pop @total_secs;
+    my $total_min;
+    my ( $sec, $min, $hour ) = ( 0, 0, 0 );
+    if ( $total_sec >= 60 ) {
+        $sec       = $total_sec % 60;
+        $total_min = int( $total_sec / 60 );
+        if ( $total_min >= 60 ) {
+            $min  = $total_min % 60;
+            $hour = int( $total_min / 60 );
+        }
+        else {
+            $min = $total_min;
+        }
+    }
+    else {
+        $sec = $total_sec;
+    }
+
+    my @time = ( $sec, $min, $hour );
+    foreach (@time) { $_ = sprintf "%02d", $_ if $_ < 10 }
+    @time = reverse @time;
+    my $time = join ":", @time;
+    open LASTPLAYINFO, "> $last_play_info"
+        or die "Can't open $last_play_info: $!\n";
+    print LASTPLAYINFO "$time\n";
+    close LASTPLAYINFO;
+}
+
+sub call_mplayer {
+    $movie = shift;
+    if ( -e $last_play_info and -s $last_play_info ) {
+        my $time = &_read_last_play();
+        system "mplayer -ss $time $movie > $mplayer_output";
+    }
+    else {
+        system "mplayer $movie > $mplayer_output";
+    }
+
+    if ( -e $mplayer_output and -s $mplayer_output ) { &_write_last_play() }
+}
+
+sub usage { print "Usage: $0 <movie file>\n" }
+
+if ( defined($movie) ) {
+    &call_mplayer($movie);
+}
+else {
+    &usage();
+}
