@@ -1,4 +1,4 @@
-#!/usr/bin/env perl
+!/usr/bin/env perl
 #
 # Remember last play position of movie to resume from it later. (Only for
 # MPlayer)
@@ -62,10 +62,10 @@ sub call_mplayer {
     $movie = shift;
     if ( -e $last_play_info and -s $last_play_info ) {
         my $time = &_read_last_play();
-        system "mplayer -ss $time $movie > $mplayer_output";
+        system "mplayer -ss $time \Q$movie\E > $mplayer_output";
     }
     else {
-        system "mplayer $movie > $mplayer_output";
+        system "mplayer \Q$movie\E > $mplayer_output";
     }
 
     if ( -e $mplayer_output and -s $mplayer_output ) { &_write_last_play() }
