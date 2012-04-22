@@ -1,81 +1,79 @@
-!/usr/bin/env perl
+#!/usr/bin/env perl
 #
-# Remember last play position of movie to resume from it later. (Only for
-# MPlayer)
-# Author: Xu Xiaodong <xxdlhy@gmail.com>, 2009
-# License: GPLv3
+# name:      lastplay, remember last play position of mplayer
+# author:    Xu Xiaodong <xxdlhy@gmail.com>
+# license:   GPL
+# created:   2010 Mar 20
+# modified:  2011 Dec 02
 #
 
 use strict;
 use warnings;
 
-my $mplayer_output = 'mplayeroutput';
-my $last_play_info = 'lastplayinfo';
-my $movie          = shift;
+use Date::Calc qw(Time_to_Date);
 
-sub _read_last_play {
-    open LASTPLAYINFO, $last_play_info
-        or die "Can't open $last_play_info: $!\n";
-    chomp( my $time = readline LASTPLAYINFO );
-    close LASTPLAYINFO;
-    return $time;
+my $movie = shift;
+
+if ( defined $movie ) {
+  call( $movie, $$, 'mtime' );
+}
+else {
+  usage();
 }
 
-sub _write_last_play {
-    local $/ = q{[J};
-    my @total_secs;
-    open MPLAYEROUTPUT, $mplayer_output
-        or die "Can't open $mplayer_output:$!\n";
-    while (<MPLAYEROUTPUT>) { push @total_secs, $1 if /A:\s*(\d+)/ }
-    close MPLAYEROUTPUT;
-    unlink $mplayer_output;
+sub _read {
+  my ($file) = @_;
 
-    my $total_sec = pop @total_secs;
-    my $total_min;
-    my ( $sec, $min, $hour ) = ( 0, 0, 0 );
-    if ( $total_sec >= 60 ) {
-        $sec       = $total_sec % 60;
-        $total_min = int( $total_sec / 60 );
-        if ( $total_min >= 60 ) {
-            $min  = $total_min % 60;
-            $hour = int( $total_min / 60 );
-        }
-        else {
-            $min = $total_min;
-        }
-    }
-    else {
-        $sec = $total_sec;
-    }
+  open my ($in_fh), '<', $file
+    or die "Can't read $file: $!\n";
 
-    my @time = ( $sec, $min, $hour );
-    foreach (@time) { $_ = sprintf "%02d", $_ if $_ < 10 }
-    @time = reverse @time;
-    my $time = join ":", @time;
-    open LASTPLAYINFO, "> $last_play_info"
-        or die "Can't open $last_play_info: $!\n";
-    print LASTPLAYINFO "$time\n";
-    close LASTPLAYINFO;
+  return readline $in_fh;
+
+  close $in_fh;
 }
 
-sub call_mplayer {
-    $movie = shift;
-    if ( -e $last_play_info and -s $last_play_info ) {
-        my $time = &_read_last_play();
-        system "mplayer -ss $time \Q$movie\E > $mplayer_output";
-    }
-    else {
-        system "mplayer \Q$movie\E > $mplayer_output";
-    }
+sub _write {
+  my ( $infile, $outfile ) = @_;
+  local $/ = q{[K};
+  my @secs;
 
-    if ( -e $mplayer_output and -s $mplayer_output ) { &_write_last_play() }
+  open my ($in_fh), '<', $infile
+    or die "Can't read $infile: $!\n";
+
+  while (<$in_fh>) { push @secs, $1 if /A:\s*(\d+)/ }
+
+  close $in_fh;
+
+  unlink $infile;
+
+  my $sec = pop @secs;
+  my $time = join ":", ( Time_to_Date($sec) )[ 3 .. 5 ];
+
+  open my ($out_fh), '>', $outfile
+    or die "Can't write $outfile: $!\n";
+
+  print $out_fh $time;
+
+  close $out_fh;
+}
+
+sub call {
+  my ( $movie, $mplayer_out, $time_out ) = @_;
+
+  if ( -e $time_out and -s $time_out ) {
+    my $time = _read($time_out);
+
+    system "mplayer -ss $time \Q$movie\E > $mplayer_out";
+  }
+  else {
+    system "mplayer \Q$movie\E > $mplayer_out";
+  }
+
+  if ( -e $mplayer_out and -s $mplayer_out ) {
+    _write( $mplayer_out, $time_out );
+  }
 }
 
 sub usage { print "Usage: $0 <movie file>\n" }
 
-if ( defined($movie) ) {
-    &call_mplayer($movie);
-}
-else {
-    &usage();
-}
+# vim: ai:et:ts=2:sw=2:sts=2:tw=78:ft=perl
